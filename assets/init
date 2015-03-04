@@ -14,6 +14,7 @@ USERCONF_TEMPLATES_DIR="${DATA_DIR}/config"
 
 DB_HOST=${DB_HOST:-}
 DB_PORT=${DB_PORT:-}
+DB_SOCK=${DB_SOCK:-}
 DB_NAME=${DB_NAME:-}
 DB_USER=${DB_USER:-}
 DB_PASS=${DB_PASS:-}
@@ -100,7 +101,7 @@ elif [ -n "${POSTGRESQL_PORT_5432_TCP_ADDR}" ]; then
   DB_NAME=${DB_NAME:-${POSTGRESQL_ENV_DB}}
 fi
 
-if [ -z "${DB_HOST}" ]; then
+if [ -z "${DB_HOST}" -a -z "${DB_SOCK}" ]; then
   echo "ERROR: "
   echo "  Please configure the database connection."
   echo "  Refer http://git.io/JkE-cw for more information."
@@ -241,8 +242,14 @@ else
   echo "Invalid database type: '$DB_TYPE'. Supported choices: [mysql, postgres]."
 fi
 
-sudo -u redmine -H sed 's/{{DB_HOST}}/'"${DB_HOST}"'/' -i config/database.yml
-sudo -u redmine -H sed 's/{{DB_PORT}}/'"${DB_PORT}"'/' -i config/database.yml
+if [ "${DB_SOCK}" ]; then
+  sudo -u redmine -H sed 's/host/socket/' -i config/database.yml
+  sudo -u redmine -H sed 's|{{DB_HOST}}|'"${DB_SOCK}"'|' -i config/database.yml
+  sudo -u redmine -H sed '/{{DB_PORT}}/d' -i config/database.yml
+else
+  sudo -u redmine -H sed 's/{{DB_HOST}}/'"${DB_HOST}"'/' -i config/database.yml
+  sudo -u redmine -H sed 's/{{DB_PORT}}/'"${DB_PORT}"'/' -i config/database.yml
+fi
 sudo -u redmine -H sed 's/{{DB_NAME}}/'"${DB_NAME}"'/' -i config/database.yml
 sudo -u redmine -H sed 's/{{DB_USER}}/'"${DB_USER}"'/' -i config/database.yml
 sudo -u redmine -H sed 's/{{DB_PASS}}/'"${DB_PASS}"'/' -i config/database.yml
@@ -367,11 +374,19 @@ fi
 # for the database server to come online.
 case "${DB_TYPE}" in
   mysql)
-    prog="mysqladmin -h ${DB_HOST} -P ${DB_PORT} -u ${DB_USER} ${DB_PASS:+-p$DB_PASS} status"
+    if [ "${DB_SOCK}" ]; then
+      prog="mysqladmin -S ${DB_SOCK} -u ${DB_USER} ${DB_PASS:+-p$DB_PASS} status"
+    else
+      prog="mysqladmin -h ${DB_HOST} -P ${DB_PORT} -u ${DB_USER} ${DB_PASS:+-p$DB_PASS} status"
+    fi
     ;;
   postgres)
     prog=$(find /usr/lib/postgresql/ -name pg_isready)
-    prog="${prog} -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB_NAME} -t 1"
+    if [ "${DB_SOCK}" ]; then
+      prog="${prog} -h $(dirname ${DB_SOCK}) -p $(basename ${DB_SOCK}) -U ${DB_USER} -d ${DB_NAME} -t 1"
+    else
+      prog="${prog} -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB_NAME} -t 1"
+    fi
     ;;
 esac
 
