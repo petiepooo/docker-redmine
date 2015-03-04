@@ -13,9 +13,11 @@
     - [MySQL](#mysql)
       - [Internal MySQL Server](#internal-mysql-server)
       - [External MySQL Server](#external-mysql-server)
+      - [MySQL Server on Host](#mysql-server-on-host)
       - [Linking to MySQL Container](#linking-to-mysql-container)
     - [PostgreSQL](#postgresql)
       - [External PostgreSQL Server](#external-postgresql-server)
+      - [PostgreSQL Server on Host](#postgresql-server-on-host)
       - [Linking to PostgreSQL Container](#linking-to-postgresql-container)
   - [Memcached (Optional)](#memcached-optional)
       - [External Memcached Server](#external-memcached-server)
@@ -218,6 +220,31 @@ docker run --name=redmine -it --rm \
 
 This will initialize the redmine database and after a couple of minutes your redmine instance should be ready to use.
 
+#### MySQL Server on Host
+
+The image can be configured to use a MySQL database running on the Docker host using a UNIX-Domain socket. The database configuration should be specified using environment variables while starting the Redmine image.
+
+Before you start the Redmine image create user and database for redmine.
+
+```sql
+mysql -uroot -p
+CREATE USER 'redmine'@'localhost' IDENTIFIED BY 'password';
+CREATE DATABASE IF NOT EXISTS `redmine_production` DEFAULT CHARACTER SET `utf8` COLLATE `utf8_unicode_ci`;
+GRANT SELECT, LOCK TABLES, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER ON `redmine_production`.* TO 'redmine'@'localhost';
+```
+
+We are now ready to start the redmine application.
+
+```bash
+docker run --name=redmine -it --rm \
+  -v /var/run/mysqld/mysqld.sock:/tmp/db.sock -e "DB_SOCK=/tmp/db.sock" \
+  -e "DB_TYPE=mysql" -e "DB_NAME=redmine_production" \
+  -e "DB_USER=redmine" -e "DB_PASS=password" \
+  -v /opt/redmine/data:/home/redmine/data sameersbn/redmine:2.6.2
+```
+
+This will initialize the redmine database and after a couple of minutes your redmine instance should be ready to use.
+
 #### Linking to MySQL Container
 
 You can link this image with a mysql container for the database requirements. The alias of the mysql server container should be set to **mysql** while linking with the redmine image.
@@ -283,6 +310,29 @@ We are now ready to start the redmine application.
 docker run --name=redmine -it --rm \
   -e "DB_TYPE=postgres" -e "DB_HOST=192.168.1.100" \
   -e "DB_NAME=redmine_production" -e "DB_USER=redmine" -e "DB_PASS=password" \
+  -v /opt/redmine/data:/home/redmine/data \
+  sameersbn/redmine:2.6.2
+```
+
+This will initialize the redmine database and after a couple of minutes your redmine instance should be ready to use.
+
+#### PostgreSQL Server on Host
+
+The image also supports using a PostgreSQL Server on the Docker host via UNIX-Domain sockets. This is also controlled via environment variables.
+
+```sql
+CREATE ROLE redmine with LOGIN CREATEDB PASSWORD 'password';
+CREATE DATABASE redmine_production;
+GRANT ALL PRIVILEGES ON DATABASE redmine_production to redmine;
+```
+
+We are now ready to start the redmine application.
+
+```bash
+docker run --name=redmine -it --rm \
+  -v /var/pgsql_socket/.s.PGSQL.5432:/tmp/db.sock -e "DB_SOCK=/tmp/db.sock" \
+  -e "DB_TYPE=postgres" -e "DB_NAME=redmine_production" \
+  -e "DB_USER=redmine" -e "DB_PASS=password" \
   -v /opt/redmine/data:/home/redmine/data \
   sameersbn/redmine:2.6.2
 ```
